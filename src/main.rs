@@ -23,6 +23,7 @@ enum LispData {
     Bool(bool),
     Num(i64), // TODO: Big ints, floats, etc.
     Symbol(String),
+    Vector(Vec<LispData>),
     Cons(Box<LispData>, Box<LispData>),
 }
 use LispData::*;
@@ -45,6 +46,16 @@ impl fmt::Display for LispData {
             Bool(b) => write!(f, "#{}", if *b { 't' } else { 'f' }),
             Num(n) => n.fmt(f),
             Symbol(s) => s.fmt(f),
+            Vector(v) => {
+                write!(f, "#(")?;
+                if let Some(val) = v.get(0) {
+                    val.fmt(f)?;
+                }
+                for val in v.iter().skip(1) {
+                    write!(f, " {}", val)?;
+                }
+                write!(f, ")")
+            }
             Cons(a, b) => {
                 write!(f, "({}", a)?;
                 write_cdr(&b, f)?;
@@ -118,6 +129,12 @@ fn sharp(input: &str) -> IResult<&str, LispData> {
         'o' => parse_num(oct_digit1(input)?, 8),
         'd' => num(input),
         'x' => parse_num(hex_digit1(input)?, 16),
+        '(' => {
+            let (input, _) = multispace0(input)?;
+            let (input, vals) = many0(terminated(lisp_data, multispace0))(input)?;
+            let (input, _) = char(')')(input)?;
+            Ok((input, Vector(vals)))
+        }
         _ => Err(Err::Error(Error::new("#", Char))),
     }
 }
