@@ -156,12 +156,17 @@ fn block_comment(input: &str) -> IResult<&str, ()> {
 }
 
 fn line_comment(input: &str) -> IResult<&str, ()> {
-    let (input, _) = delimited(tag("#;"), take_until("\n"), line_ending)(input)?;
+    let (input, _) = delimited(char(';'), take_until("\n"), line_ending)(input)?;
+    Ok((input, ()))
+}
+
+fn datum_comment(input: &str) -> IResult<&str, ()> {
+    let (input, _) = preceded(tag("#;"), lisp_data)(input)?;
     Ok((input, ()))
 }
 
 fn comment(input: &str) -> IResult<&str, LispData> {
-    let (input, _) = alt((block_comment, line_comment))(input)?;
+    let (input, _) = alt((block_comment, line_comment, datum_comment))(input)?;
     lisp_data(input)
 }
 
