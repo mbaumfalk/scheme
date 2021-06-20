@@ -15,6 +15,7 @@ use nom::{
 use std::{
     fmt,
     io::{self, BufRead, Write},
+    ops::Neg,
 };
 
 #[derive(Debug)]
@@ -108,15 +109,25 @@ fn symbol(input: &str) -> IResult<&str, LispData> {
     }
 }
 
-fn parse_num<'a>(input: (&'a str, &'a str), radix: u32) -> IResult<&'a str, LispData> {
-    match i64::from_str_radix(input.1, radix) {
-        Ok(n) => Ok((input.0, Num(n))),
+fn parse_num<'a>(
+    f: fn(&'a str) -> IResult<&'a str, &'a str>,
+    input: &'a str,
+    radix: u32,
+) -> IResult<&'a str, LispData> {
+    let (input, negate) = opt(char('-'))(input)?;
+    let (input, data) = f(input)?;
+    match i64::from_str_radix(data, radix) {
+        Ok(n) => Ok((input, Num(if negate.is_some() { n.neg() } else { n }))),
         Err(_) => Err(Err::Error(Error::new("parseint", Char))),
     }
 }
 
 fn num(input: &str) -> IResult<&str, LispData> {
-    parse_num(digit1(input)?, 10)
+    parse_num(digit1, input, 10)
+}
+
+fn bin_digit1(input: &str) -> IResult<&str, &str> {
+    take_while1(|a| a == '0' || a == '1')(input)
 }
 
 fn sharp(input: &str) -> IResult<&str, LispData> {
@@ -125,10 +136,10 @@ fn sharp(input: &str) -> IResult<&str, LispData> {
     match c.to_lowercase().next().unwrap() {
         'f' => Ok((input, Bool(false))),
         't' => Ok((input, Bool(true))),
-        'b' => parse_num(take_while1(|a| a == '0' || a == '1')(input)?, 2),
-        'o' => parse_num(oct_digit1(input)?, 8),
+        'b' => parse_num(bin_digit1, input, 2),
+        'o' => parse_num(oct_digit1, input, 8),
         'd' => num(input),
-        'x' => parse_num(hex_digit1(input)?, 16),
+        'x' => parse_num(hex_digit1, input, 16),
         '(' => {
             let (input, _) = multispace0(input)?;
             let (input, vals) = many0(terminated(lisp_data, multispace0))(input)?;
