@@ -24,6 +24,7 @@ enum LispData {
     Bool(bool),
     Num(i64), // TODO: Big ints, floats, etc.
     Symbol(String),
+    LispString(String),
     Vector(Vec<LispData>),
     Cons(Box<LispData>, Box<LispData>),
 }
@@ -47,6 +48,7 @@ impl fmt::Display for LispData {
             Bool(b) => write!(f, "#{}", if *b { 't' } else { 'f' }),
             Num(n) => n.fmt(f),
             Symbol(s) => s.fmt(f),
+            LispString(s) => write!(f, "{:?}", s),
             Vector(v) => {
                 write!(f, "#(")?;
                 if let Some(val) = v.get(0) {
@@ -170,9 +172,35 @@ fn comment(input: &str) -> IResult<&str, LispData> {
     lisp_data(input)
 }
 
+fn escaped_char(input: &str) -> IResult<&str, char> {
+    let (input, _) = char('\\')(input)?;
+    let (input, seq) = anychar(input)?;
+    let c = match seq {
+        'a' => '\x07',
+        'b' => '\x08',
+        'n' => '\n',
+        'r' => '\r',
+        't' => '\t',
+        '"' => '\"',
+        '\\' => '\\',
+        '|' => '|',
+        _ => return Err(Err::Error(Error::new("escape", Char))),
+    };
+    Ok((input, c))
+}
+
+fn string(input: &str) -> IResult<&str, LispData> {
+    let (input, data) = delimited(
+        char('"'),
+        many0(alt((none_of("\\\""), escaped_char))),
+        char('"'),
+    )(input)?;
+    Ok((input, LispString(data.into_iter().collect())))
+}
+
 fn lisp_data(input: &str) -> IResult<&str, LispData> {
     let (input, _) = multispace0(input)?;
-    alt((quote, cons, comment, sharp, num, symbol))(input)
+    alt((quote, cons, comment, sharp, num, string, symbol))(input)
 }
 
 fn main() -> io::Result<()> {
